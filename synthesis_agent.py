@@ -26,6 +26,7 @@ def synthesize(query: str, context_chunks: list[str])->dict: #generate grounded 
           2. Always cite which chunk your answer comes from e.g. [Chunk 1]
           3. If the answer is not in the context, say "Not found in provided documents"
           4. Be precise with numbers — do not approximate or guess
+          5. Keep answers concise — 1-2 sentences maximum  
 
           Context:
           {context}
