@@ -47,6 +47,7 @@ def setup_pipeline():
 
 
 def run_evaluation():
+          print("=== CI Evaluation v2 ===") 
           documents, collection = setup_pipeline()
           questions, answers, contexts, ground_truths = [], [], [], []
 
