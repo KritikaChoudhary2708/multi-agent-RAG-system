@@ -48,7 +48,7 @@ def setup_pipeline():
 
 def run_evaluation():
           documents, collection = setup_pipeline()
-          questions, answers, contects, ground_truths = [], [], [], []
+          questions, answers, contexts, ground_truths = [], [], [], []
 
           for item in golden_dataset:
                     top_chunks = hybrid_search(item["question"], documents, collection, top_k=3)
