@@ -87,10 +87,10 @@ def run_evaluation():
           )
 
           res ={
-                    "faithfulness": float(scores["faithfulness"]),
-                    "answer_relevancy": float(scores["answer_relevancy"]),
-                    "context_recall": float(scores["context_recall"]),
-                    "context_precision": float(scores["context_precision"]),
+                    "faithfulness": float(scores["faithfulness"][0]),
+                    "answer_relevancy": float(scores["answer_relevancy"][0]),
+                    "context_recall": float(scores["context_recall"][0]),
+                    "context_precision": float(scores["context_precision"][0]),
           }
 
           with open("eval_scores.json", "w") as f:
