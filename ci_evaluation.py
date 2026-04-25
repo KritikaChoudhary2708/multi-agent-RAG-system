@@ -67,8 +67,10 @@ def run_evaluation():
           })
 
           llm = ChatGroq(
-                    model = "llama-3.1-8b-instant",
-                    api_key = os.getenv("GROK_API_KEY")
+                    model = "llama-3.3-70b-versatile",
+                    api_key = os.getenv("GROK_API_KEY"),
+                    n=1,                  
+                    max_tokens=4096      
           )
           embeddings = HuggingFaceEmbeddings(
                     model_name = "sentence-transformers/all-MiniLM-L6-v2"
