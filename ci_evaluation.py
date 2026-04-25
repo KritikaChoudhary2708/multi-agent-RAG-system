@@ -67,8 +67,10 @@ def run_evaluation():
           })
 
           llm = ChatGroq(
-                    model = "llama-3.1-8b-instant",
-                    api_key = os.getenv("GROK_API_KEY")
+                    model = "llama-3.3-70b-versatile",
+                    api_key = os.getenv("GROK_API_KEY"),
+                    n=1,                  
+                    max_tokens=4096      
           )
           embeddings = HuggingFaceEmbeddings(
                     model_name = "sentence-transformers/all-MiniLM-L6-v2"
@@ -87,10 +89,10 @@ def run_evaluation():
           )
 
           res ={
-                    "faithfulness": float(scores["faithfulness"]),
-                    "answer_relevancy": float(scores["answer_relevancy"]),
-                    "context_recall": float(scores["context_recall"]),
-                    "context_precision": float(scores["context_precision"]),
+                    "faithfulness": float(scores["faithfulness"][0]),
+                    "answer_relevancy": float(scores["answer_relevancy"][0]),
+                    "context_recall": float(scores["context_recall"][0]),
+                    "context_precision": float(scores["context_precision"][0]),
           }
 
           with open("eval_scores.json", "w") as f:
