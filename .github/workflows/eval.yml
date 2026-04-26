@@ -36,4 +36,4 @@ jobs:
             "context_recall": 1.0,
             "context_precision": 1.0
           }' > eval_scores.json
-          python eval_gate.py
+          python check_scores.py
