@@ -11,11 +11,13 @@ from ingestion_agent import fetch_sec_filing, chunk_text
 from retrieval_agent import hybrid_search
 from synthesis_agent import synthesize, get_embedding
 from golden_dataset import golden_dataset
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
 
 def setup_pipeline():
           url = "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm"
@@ -70,8 +72,11 @@ def run_evaluation():
                     model = "llama-3.3-70b-versatile",
                     api_key = os.getenv("GROK_API_KEY"),
                     n=1,                  
-                    max_tokens=4096      
+                    max_retries=3,
+                    timeout=60,            
+                    request_timeout=60,   
           )
+          ragas_llm = LangchainLLMWrapper(groq_llm)
           embeddings = HuggingFaceEmbeddings(
                     model_name = "sentence-transformers/all-MiniLM-L6-v2"
           )
@@ -84,15 +89,28 @@ def run_evaluation():
                               context_recall,
                               context_precision
                     ],
-                    llm = llm,
+                    llm = ragas_llm,
                     embeddings = embeddings
           )
+          result = run_eval_with_retry(
+                    dataset,
+                    metrics=[faithfulness, answer_relevancy, context_recall, context_precision],
+                    llm=ragas_llm,
+                    embeddings=embeddings
+          )
+          if result is None:
+                print("Evaluation failed after all retries")
+                exit(1)
 
-          res ={
-                    "faithfulness": float(scores["faithfulness"][0]),
-                    "answer_relevancy": float(scores["answer_relevancy"][0]),
-                    "context_recall": float(scores["context_recall"][0]),
-                    "context_precision": float(scores["context_precision"][0]),
+          # Handle NaN scores
+          df = result.to_pandas()
+          df = df.fillna(0)
+
+          scores = {
+                "faithfulness":      float(df["faithfulness"].mean()),
+                "answer_relevancy":  float(df["answer_relevancy"].mean()),
+                "context_recall":    float(df["context_recall"].mean()),
+                "context_precision": float(df["context_precision"].mean())
           }
 
           with open("eval_scores.json", "w") as f:
@@ -100,6 +118,21 @@ def run_evaluation():
           print(json.dumps(res, indent=2))
           return res
 
+def run_eval_with_retry(dataset, metrics, llm, embeddings, retries=3):
+    for attempt in range(retries):
+        try:
+            result = evaluate(
+                dataset,
+                metrics=metrics,
+                llm=llm,
+                embeddings=embeddings,
+                raise_exceptions=False,   # KEY: don't crash on single failures
+            )
+            return result
+        except Exception as e:
+            print(f"Eval attempt {attempt+1} failed: {e}")
+            time.sleep(10 * (attempt + 1))   # backoff: 10s, 20s, 30s
+    return None
 
 if __name__ == "__main__":
           run_evaluation()

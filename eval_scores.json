@@ -1,6 +1,5 @@
 {
-  "faithfulness": 1.0,
-  "answer_relevancy": NaN,
-  "context_recall": NaN,
-  "context_precision": NaN
+  "answer": "Not found in provided documents.",
+  "confidence": 0.4,
+  "chunks_used": 3
 }
