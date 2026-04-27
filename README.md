@@ -14,7 +14,7 @@ A multi-agent RAG system built on Apple's 10-K SEC filing (2023) that answers fi
 ## Architecture
 
 ```
-User Query
+User Query (via Panchayat Web App or CLI)
     ↓
 Query Decomposition Agent     → breaks complex questions into sub-questions
     ↓
@@ -23,9 +23,25 @@ Retrieval Agent               → Hybrid Search (BM25 + Dense + RRF)
 Synthesis Agent               → Grounded answer generation with citations
     ↓
 Evaluation Agent              → RAGAS scoring (faithfulness, relevancy, recall)
+    ↓
+Panchayat (Streamlit UI)      → Interactive web interface for queries + results
 ```
 
 ---
+
+## Panchayat — Web Interface
+
+**Panchayat** is the Streamlit front-end for the multi-agent RAG system. It lets you load any document — a live SEC filing URL or a PDF upload — and ask questions against it in real time.
+
+### Features
+
+- **Dual input modes** — paste a URL (e.g., SEC EDGAR filing) or upload a PDF directly
+- **Simple query mode** — single question → grounded answer with citations
+- **Multi-hop query mode** — complex questions automatically decomposed into sub-questions, retrieved separately, then synthesized into one answer
+- **Answer confidence scoring** — each answer reports a confidence score based on citation presence
+- **Expandable chunk viewer** — see exactly which passages from the document were used
+- **Zero hallucination design** — the LLM is instructed to answer only from retrieved context; ungrounded answers are flagged
+
 
 ## Agents
 
@@ -70,6 +86,7 @@ Evaluation Agent              → RAGAS scoring (faithfulness, relevancy, recall
 | LLM (generation) | Groq — LLaMA 3.1 8B Instant |
 | Evaluation | RAGAS |
 | Data source | SEC EDGAR (Apple 10-K 2023) |
+| Web UI | Streamlit |
 | CI/CD | GitHub Actions |
 
 ---
@@ -144,7 +161,7 @@ jobs:
           python -m py_compile synthesis_agent.py
           python -m py_compile ci_evaluation.py
           python -m py_compile query_decomposition.py
-          echo "All syntax checks passed..!!!"
+          echo "✅ All files passed syntax check"
 
       - name: Check scores meet threshold
         run: |
@@ -154,10 +171,10 @@ jobs:
             "context_recall": 1.0,
             "context_precision": 1.0
           }' > eval_scores.json
-          python check_scores.py
+          python eval_gate.py
 ```
 
-### Score Thresholds (check_scores.py)
+### Score Thresholds (eval_gate.py)
 
 ```
 faithfulness     ≥ 0.85  → PASS
@@ -202,13 +219,14 @@ Companies including Anthropic, Cohere, and AI startups use scheduled evaluation 
 
 ```
 multi-agent-RAG-system/
+├── app.py                   # Streamlit web app (Panchayat)
 ├── ingestion_agent.py       # chunk, embed, store
 ├── retrieval_agent.py       # BM25 + dense + RRF hybrid search
 ├── synthesis_agent.py       # answer generation with citations
 ├── query_decomposition.py   # multi-hop question handling
 ├── evaluation_agent.py      # local RAGAS evaluation
 ├── ci_evaluation.py         # CI-optimized evaluation script
-├── check_scores.py             # score threshold checker
+├── eval_gate.py             # score threshold checker
 ├── golden_dataset.py        # verified Q&A pairs
 ├── embedding.py             # embedding utilities
 ├── vector_store.py          # ChromaDB utilities
@@ -237,12 +255,30 @@ GROQ_API_KEY=your-groq-key-here
 GOOGLE_API_KEY=your-gemini-key-here
 ```
 
-Run the full pipeline:
+### Run the CLI pipeline
+
 ```bash
 python synthesis_agent.py
 ```
 
-Run evaluation:
+### Run the Panchayat web app
+
+```bash
+streamlit run app.py
+```
+
+Then open [http://localhost:8501](http://localhost:8501) in your browser.
+
+**Using the app:**
+1. In the sidebar, paste a SEC EDGAR URL or upload a PDF
+2. Click **Load Document** — the document is chunked, embedded, and indexed
+3. Type your question in the main panel
+4. Choose **Simple Query** for direct questions or **Multi-Hop Query** for complex ones
+5. The answer appears with citation markers (`[Chunk N]`) and a confidence score
+6. Expand **View Source Chunks** to inspect the exact passages used
+
+### Run evaluation
+
 ```bash
 python evaluation_agent.py
 ```
@@ -255,6 +291,7 @@ python evaluation_agent.py
 - **Query decomposition is essential** — single retrieval fails multi-hop questions. Decompose first, retrieve per sub-question, combine.
 - **Prompt engineering > model size** — moving from `temperature=1.0` to `0.1` and adding "1-2 sentences max" moved Answer Relevancy from 0.36 to 0.998.
 - **Infrastructure constraints are engineering problems** — choosing the right evaluation cadence for your compute budget is a production decision, not a shortcut.
+- **Collection reset on document change** — ChromaDB must be cleared between document loads to prevent stale chunks from previous documents leaking into new queries.
 
 ---
 
