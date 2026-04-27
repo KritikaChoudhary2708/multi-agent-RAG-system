@@ -91,8 +91,8 @@ def multi_hop_query(query: str, documents:list[str], collection)-> dict:
           return {
                     "original_query": query,
                     "sub_ques": sub_questions,
-                    "sub_res": sub_res,
-                    "final_ans": final_ans
+                    "sub_results": sub_res,
+                    "final_answer": final_ans
           }
 
 #test
@@ -150,8 +150,8 @@ if __name__ == "__main__":
     for query in queries:
         result = multi_hop_query(query, documents, collection)
         print(f"\n{'='*60}")
-        print(f"FINAL ANSWER:\n{result['final_ans']}")
+        print(f"FINAL ANSWER:\n{result['final_answer']}")
         print(f"\nSub-question results:")
-        for r in result['sub_res']:
+        for r in result['sub_results']:
             print(f"  Q: {r['sub_question']}")
             print(f"  A: {r['answer']} (confidence: {r['confidence']})")
