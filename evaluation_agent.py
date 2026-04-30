@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
-print("GROQ KEY:", os.getenv("GROK_API_KEY")[:10] if os.getenv("GROK_API_KEY") else "NOT FOUND")
+print("GROQ KEY:", os.getenv("GROQ_API_KEY")[:10] if os.getenv("GROQ_API_KEY") else "NOT FOUND")
 
 # --- Setup RAG pipeline (same as before) ---
 def setup_pipeline():
@@ -85,7 +85,7 @@ def score_with_ragas(ragas_data: dict):
           #LLM for RAGAS scoring (GROQ)
           llm = ChatGroq(
                     model = "llama-3.1-8b-instant",
-                    api_key=os.getenv("GROK_API_KEY")
+                    api_key=os.getenv("GROQ_API_KEY")
           )
           #embedding for RAGAS
           embeddings = HuggingFaceEmbeddings(

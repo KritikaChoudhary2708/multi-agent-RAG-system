@@ -30,7 +30,7 @@ def load_corpus():
 
 def attack(entry, category, documents, collection):
     query = entry['prompt_text']
-    if category== 'context_poisioning':
+    if category== 'context_poisoning':
         chunks = [query]
     else:
         results = hybrid_search(query, documents, collection, top_k = 3)

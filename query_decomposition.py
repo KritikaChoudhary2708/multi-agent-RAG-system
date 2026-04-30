@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 embedder =  SentenceTransformer('all-MiniLM-L6-v2')
-groq_client = Groq(api_key=os.getenv("GROK_API_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 #decompose query
 def decompose_query(query:str)->dict:
