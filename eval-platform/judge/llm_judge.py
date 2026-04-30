@@ -46,4 +46,4 @@ if __name__ == "__main__":
         prompt="What is Apple's revenue in 2023?",
         response="I think it might be around 300 billion, I'm not sure."
     ))
-    print(json.dumps(result, indent=2))
+    print(result["faithfulness"]+result["safety"]+result["relevance"]/3)
