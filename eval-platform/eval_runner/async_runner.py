@@ -10,7 +10,7 @@ async def run_single(model:str, prompt: str)-> dict:
     response = await litellm.acompletion(
         model=model,
         messages=[{"role":"user","content":prompt}])
-    print(response)
+    print("\n\n",response)
     return {
         "model": model,
         "prompt": prompt,
