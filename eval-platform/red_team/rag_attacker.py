@@ -4,12 +4,13 @@ import chromadb
 from datetime import datetime
 import os
 
-sys.path.insert(0, '/Users/kritikachoudhary/Desktop/multi-agent-RAG-system')
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, PROJECT_ROOT)
 
 from ingestion_agent import ingest, chunk_text, fetch_sec_filing
 from retrieval_agent import hybrid_search
 from synthesis_agent import synthesize
-from prompt_library import PROMPTS
+from red_team.prompt_library import PROMPTS
 
 SEC_URL = "https://www.sec.gov/Archives/edgar/data/320193/000032019323000106/aapl-20230930.htm"
 
@@ -28,15 +29,14 @@ def load_corpus():
     documents = chunk_text(text)
     return documents, collection
 
-def attack(entry, category, documents, collection):
+def attack(entry, category, documents, collection, model: str = "llama-3.1-8b-instant"):
     query = entry['prompt_text']
-    if category== 'context_poisoning':
+    if category == 'context_poisoning':
         chunks = [query]
     else:
-        results = hybrid_search(query, documents, collection, top_k = 3)
-        chunks = [r[0] for r in results]
-    
-    response = synthesize(query, chunks)
+        chunks = hybrid_search(query, documents, collection, top_k=3)
+
+    response = synthesize(query, chunks, model=model)
     return{
         "id": entry['id'],
         "category": category,
@@ -55,7 +55,7 @@ def run_all():
     for category, prompts in PROMPTS.items():
         print(f"\n Running {category} ({len(prompts)} prompts):")
         for entry in prompts:
-            result =  attack(entry, category, documents, collection)
+            result = attack(entry, category, documents, collection)
             results.append(result)
     os.makedirs("../../results", exist_ok=True)
     with open("../../results/attack_results.json", "w") as f:
