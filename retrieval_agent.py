@@ -50,7 +50,7 @@ def rrf(bm25_res, den_res, documents, k:int = 60) -> list[tuple]: #combines the 
 
 #hybrid
 
-def hybrid_search(query: str, documents: list[str], collection, top_k: int = 3)-> list[tuple]:
+def hybrid_search(query: str, documents: list[str], collection, top_k: int = 3) -> list[str]:
           bm25_res = bm25_search(query, documents, top_k =5)
           den_res = dense_search(query, collection, top_k =5)
           fused = rrf(bm25_res, den_res, documents, k=60)
