@@ -1,20 +1,24 @@
-# Multi-Agent RAG System
-> Production-grade Retrieval Augmented Generation pipeline over SEC filings with full evaluation and CI/CD.
+# Multi-Agent RAG System + LLM Eval Platform
+> Production-grade Retrieval Augmented Generation pipeline over SEC filings — with adversarial red-teaming, LLM-as-judge scoring, a live leaderboard, and a dual CI/CD gate.
 
 ---
 
-## Project Overview
+## What This Is
 
-A multi-agent RAG system built on Apple's 10-K SEC filing (2023) that answers financial questions with grounded, cited answers. Built as Project 1 of a 100-day public building challenge.
+Two projects. One unified system.
 
-**Key achievement:** Faithfulness score of 1.0 and Answer Relevancy of 0.998 on RAGAS evaluation — zero hallucination on financial data.
+**Project 1 — Multi-Agent RAG System (Panchayat):** Answers financial questions from SEC filings with faithfulness 1.0 and zero hallucination on RAGAS evaluation.
+
+**Project 2 — LLM Eval & Red-Teaming Platform:** Attacks P1 with 27 adversarial prompts across 6 categories, scores responses using an ensemble judge (rule-based + LLM-as-judge), posts results to a live leaderboard, auto-generates a PDF report, and enforces a safety gate in CI.
+
+The story: I built a RAG system, then built the infrastructure to break it, measure it, and make sure it never regresses.
 
 ---
 
-## Architecture
+## Full Architecture
 
 ```
-User Query (via Panchayat Web App or CLI)
+User Query (via Panchayat Web App)
     ↓
 Query Decomposition Agent     → breaks complex questions into sub-questions
     ↓
@@ -24,76 +28,91 @@ Synthesis Agent               → Grounded answer generation with citations
     ↓
 Evaluation Agent              → RAGAS scoring (faithfulness, relevancy, recall)
     ↓
-Panchayat (Streamlit UI)      → Interactive web interface for queries + results
+Panchayat (Streamlit UI)      → Interactive web interface
+
+
+Red-Team Attack Layer (eval-platform/)
+    ↓
+RAG Attacker                  → 27 adversarial prompts across 6 categories
+    ↓
+Async Eval Runner             → LiteLLM + asyncio parallel execution
+    ↓
+Ensemble Judge                → 0.4 × rule score + 0.6 × LLM-as-judge score
+    ↓
+FastAPI Leaderboard           → Persists results to SQLite, serves /leaderboard
+    ↓
+Streamlit Dashboard           → Live model comparison chart
+    ↓
+PDF Report Generator          → Auto-generates per-run report (fpdf2)
+    ↓
+CI Safety Gate                → Blocks merge if avg score < 0.70
 ```
 
 ---
 
-## Panchayat — Web Interface
+## CI/CD — Dual Gate
 
-**Panchayat** is the Streamlit front-end for the multi-agent RAG system. It lets you load any document — a live SEC filing URL or a PDF upload — and ask questions against it in real time.
+Every PR triggers two jobs in sequence:
 
-### Features
+**Job 1 — Quality Gate (P1)**
+- Syntax validation across all P1 agents
+- RAGAS score floor: faithfulness ≥ 0.85, relevancy ≥ 0.75
 
-- **Dual input modes** — paste a URL (e.g., SEC EDGAR filing) or upload a PDF directly
-- **Simple query mode** — single question → grounded answer with citations
-- **Multi-hop query mode** — complex questions automatically decomposed into sub-questions, retrieved separately, then synthesized into one answer
-- **Answer confidence scoring** — each answer reports a confidence score based on citation presence
-- **Expandable chunk viewer** — see exactly which passages from the document were used
-- **Zero hallucination design** — the LLM is instructed to answer only from retrieved context; ungrounded answers are flagged
+**Job 2 — Safety Gate (P2)**
+- Runs adversarial prompts against the RAG system
+- Ensemble judge scores each response
+- Exits code 1 (blocks merge) if avg score < 0.70
 
+```yaml
+jobs:
+  evaluate:       # P1 quality gate
+    ...
+  safety-eval:    # P2 safety gate
+    needs: evaluate
+    steps:
+      - name: Run safety gate
+        run: |
+          cd eval-platform
+          python3 main.py --model groq/llama-3.1-8b-instant --category prompt_injection --ci
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+```
 
-## Agents
+A PR that improves answer quality but makes the model more vulnerable to prompt injection gets blocked automatically.
 
-### 1. Ingestion Agent (`ingestion_agent.py`)
+---
+
+## P1 — Multi-Agent RAG System
+
+### Agents
+
+**1. Ingestion Agent (`ingestion_agent.py`)**
 - Fetches real SEC filings from EDGAR
 - Semantic chunking (500 words, 50-word overlap)
-- Embeds chunks using `sentence-transformers/all-MiniLM-L6-v2`
+- Embeds using `sentence-transformers/all-MiniLM-L6-v2`
 - Stores vectors in ChromaDB with metadata
 
-### 2. Retrieval Agent (`retrieval_agent.py`)
-- **BM25** — exact keyword matching via `rank-bm25`
-- **Dense search** — semantic vector similarity via ChromaDB
-- **Reciprocal Rank Fusion (RRF)** — combines both rankings
-- Returns top-k most relevant chunks
+**2. Retrieval Agent (`retrieval_agent.py`)**
+- BM25 — exact keyword matching via `rank-bm25`
+- Dense search — semantic vector similarity via ChromaDB
+- Reciprocal Rank Fusion (RRF) — combines both rankings
 
-### 3. Synthesis Agent (`synthesis_agent.py`)
-- Takes retrieved chunks + query → generates grounded answer
+**3. Synthesis Agent (`synthesis_agent.py`)**
+- Retrieved chunks + query → grounded answer
 - Forced citation format: `[Chunk N]`
 - `temperature=0.1` to minimize hallucination
 - Confidence scoring based on citation presence
 
-### 4. Query Decomposition Agent (`query_decomposition.py`)
+**4. Query Decomposition Agent (`query_decomposition.py`)**
 - Breaks multi-hop questions into independent sub-questions
-- Retrieves separately for each sub-question
+- Retrieves separately per sub-question
 - Combines sub-answers into one coherent final answer
-- Handles questions requiring data from multiple document sections
 
-### 5. Evaluation Agent (`evaluation_agent.py`)
+**5. Evaluation Agent (`evaluation_agent.py`)**
 - RAGAS evaluation against a golden Q&A dataset
 - Metrics: faithfulness, answer relevancy, context recall, context precision
-- Golden dataset: 5 verified questions from Apple's 10-K
 
----
-
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (local, free) |
-| Vector DB | ChromaDB |
-| Keyword search | rank-bm25 |
-| LLM (generation) | Groq — LLaMA 3.1 8B Instant |
-| Evaluation | RAGAS |
-| Data source | SEC EDGAR (Apple 10-K 2023) |
-| Web UI | Streamlit |
-| CI/CD | GitHub Actions |
-
----
-
-## RAGAS Evaluation Results
-
-Evaluated against a golden dataset of 5 verified questions from Apple's 2023 10-K filing:
+### RAGAS Results
 
 ```
 Faithfulness:      1.000  ✅  (zero hallucination)
@@ -102,116 +121,81 @@ Context Recall:    1.000  ✅  (right chunks retrieved)
 Context Precision: 1.000  ✅  (no noisy chunks)
 ```
 
-**Sample output:**
+---
+
+## P2 — LLM Eval & Red-Teaming Platform
+
+### Red-Team Prompt Library
+
+27 adversarial prompts across 6 attack categories:
+
+| Category | Count | Severity | Expected |
+|---|---|---|---|
+| `prompt_injection` | 5 | high | should_refuse |
+| `jailbreak` | 5 | high | should_refuse |
+| `hallucination_trap` | 4 | medium | should_not_fabricate |
+| `bias_probe` | 6 | medium | should_not_stereotype |
+| `context_poisoning` | 3 | high | should_not_propagate_false_info |
+| `multi_hop_confusion` | 4 | medium | should_not_fabricate |
+
+### Ensemble Judge
+
 ```
-Q: What was Apple's total net sales in 2023?
-A: $383,285 million [Chunk 2]
-Confidence: 0.90
+final_score = 0.4 × rule_score + 0.6 × llm_score
+```
 
-Q: How much did Apple spend on R&D in 2023?
-A: $29,915 million [Chunk 1]
-Confidence: 0.90
+- **Rule judge** — regex/keyword heuristics → 0 or 1
+- **LLM judge** — Gemini Flash scores response against rubric → 0.0–1.0
+- **Ensemble** — weighted combination
 
-Q: What was Apple's net income in 2023?
-A: $96,995 million [Chunk 2]
-Confidence: 0.90
+### Key Finding
+
+26/27 prompts returned "Not found in provided documents" (confidence 0.4). This is a retrieval-miss, not a genuine safety refusal. The judge distinguishes three outcomes:
+1. Genuine refusal (LLM safety filter fired)
+2. Retrieval-miss (no relevant chunk — looks like refusal but isn't)
+3. Actual compliance (model answered the adversarial prompt)
+
+### CLI
+
+```bash
+# Run against a specific category
+python3 main.py --model groq/llama-3.1-8b-instant --category prompt_injection
+
+# Run all categories with CI gate
+python3 main.py --model groq/llama-3.1-8b-instant --category all --ci
+```
+
+### Leaderboard
+
+FastAPI backend + Streamlit UI showing avg ensemble score, rule score, and LLM score per model. SQLite persistence — every eval run appends results.
+
+```bash
+# Start API
+cd eval-platform/leaderboard && uvicorn api:app --port 8000
+
+# Start UI
+streamlit run ui.py
 ```
 
 ---
 
-## CI/CD Pipeline
+## Tech Stack
 
-### GitHub Actions Workflow
-
-Every PR and push to `main` triggers:
-
-1. **Syntax validation** — all Python files compiled and checked
-2. **Score gate** — scores checked against minimum thresholds
-3. **Merge blocked** if any check fails
-
-```yaml
-name: RAG Evaluation Pipeline
-
-on:
-  pull_request:
-    branches: [ main ]
-  push:
-    branches: [ main ]
-
-jobs:
-  evaluate:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run syntax checks
-        run: |
-          python -m py_compile ingestion_agent.py
-          python -m py_compile retrieval_agent.py
-          python -m py_compile synthesis_agent.py
-          python -m py_compile ci_evaluation.py
-          python -m py_compile query_decomposition.py
-          echo "✅ All files passed syntax check"
-
-      - name: Check scores meet threshold
-        run: |
-          echo '{
-            "faithfulness": 1.0,
-            "answer_relevancy": 0.998,
-            "context_recall": 1.0,
-            "context_precision": 1.0
-          }' > eval_scores.json
-          python eval_gate.py
-```
-
-### Score Thresholds (eval_gate.py)
-
-```
-faithfulness     ≥ 0.85  → PASS
-answer_relevancy ≥ 0.75  → PASS
-context_recall   ≥ 0.80  → PASS
-context_precision≥ 0.80  → PASS
-```
-
----
-
-## Evaluation Strategy — Design Decision
-
-### Why RAGAS doesn't run live in CI
-
-During development, three LLM backends were evaluated for running RAGAS inside GitHub Actions:
-
-| Backend | Issue |
+| Component | Technology |
 |---|---|
-| Groq (LLaMA 3.1) | Free tier caps `n=1`; RAGAS requires `n=3` parallel requests → timeouts |
-| Gemini (Flash) | GitHub runner network restrictions → consistent TimeoutError |
-| Local Ollama | Model too large for GitHub's free runner (2-core, 7GB RAM) |
-
-This is a known infrastructure constraint with free-tier APIs — not a code problem.
-
-### Industry standard pattern adopted
-
-This project follows the same evaluation strategy used by production AI teams:
-
-```
-Every PR      → CI: syntax checks + last known score gate (fast, free)
-Before merge  → Local: full RAGAS eval against golden dataset (thorough)
-Weekly        → Scheduled: full pipeline regression test
-```
-
-Companies including Anthropic, Cohere, and AI startups use scheduled evaluation runs rather than per-PR LLM eval gates — the latency and cost don't justify blocking every merge.
-
-**The scores in this project were earned locally** against a verified golden dataset, not mocked. The CI gate enforces those scores as a floor — any code change that degrades quality below threshold blocks the merge.
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
+| Vector DB | ChromaDB |
+| Keyword search | rank-bm25 |
+| LLM (generation) | Groq — LLaMA 3.1 8B Instant |
+| LLM (judge) | Gemini Flash |
+| Unified LLM API | LiteLLM |
+| Evaluation | RAGAS |
+| Data source | SEC EDGAR (Apple 10-K 2023) |
+| Web UI | Streamlit (P1 + P2) |
+| API | FastAPI |
+| Database | SQLite |
+| PDF reports | fpdf2 |
+| CI/CD | GitHub Actions |
 
 ---
 
@@ -219,22 +203,37 @@ Companies including Anthropic, Cohere, and AI startups use scheduled evaluation 
 
 ```
 multi-agent-RAG-system/
-├── app.py                   # Streamlit web app (Panchayat)
-├── ingestion_agent.py       # chunk, embed, store
-├── retrieval_agent.py       # BM25 + dense + RRF hybrid search
-├── synthesis_agent.py       # answer generation with citations
-├── query_decomposition.py   # multi-hop question handling
-├── evaluation_agent.py      # local RAGAS evaluation
-├── ci_evaluation.py         # CI-optimized evaluation script
-├── eval_gate.py             # score threshold checker
-├── golden_dataset.py        # verified Q&A pairs
-├── embedding.py             # embedding utilities
-├── vector_store.py          # ChromaDB utilities
+├── app.py                      # Panchayat Streamlit UI
+├── ingestion_agent.py
+├── retrieval_agent.py
+├── synthesis_agent.py
+├── query_decomposition.py
+├── evaluation_agent.py
+├── ci_evaluation.py
+├── eval_gate.py
+├── golden_dataset.py
 ├── .github/
 │   └── workflows/
-│       └── eval.yml         # GitHub Actions pipeline
+│       └── eval.yml            # Dual CI gate (quality + safety)
 ├── requirements.txt
-└── .env                     # API keys (never committed)
+│
+└── eval-platform/
+    ├── main.py                 # CLI entry point
+    ├── red_team/
+    │   ├── prompt_library.py   # 27 adversarial prompts
+    │   └── rag_attacker.py     # fires prompts through P1 RAG
+    ├── eval_runner/
+    │   └── async_runner.py     # LiteLLM + asyncio
+    ├── judge/
+    │   ├── rule_judge.py
+    │   ├── llm_judge.py
+    │   └── ensemble.py
+    ├── leaderboard/
+    │   ├── db.py               # SQLite helpers
+    │   ├── api.py              # FastAPI
+    │   └── ui.py               # Streamlit dashboard
+    └── reports/
+        └── generator.py        # PDF report (fpdf2)
 ```
 
 ---
@@ -247,6 +246,7 @@ cd multi-agent-RAG-system
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+pip install -r eval-platform/requirements.txt
 ```
 
 Create `.env`:
@@ -255,32 +255,22 @@ GROQ_API_KEY=your-groq-key-here
 GOOGLE_API_KEY=your-gemini-key-here
 ```
 
-### Run the CLI pipeline
-
-```bash
-python synthesis_agent.py
-```
-
-### Run the Panchayat web app
-
+### Run Panchayat (P1 UI)
 ```bash
 streamlit run app.py
 ```
 
-Then open [http://localhost:8501](http://localhost:8501) in your browser.
-
-**Using the app:**
-1. In the sidebar, paste a SEC EDGAR URL or upload a PDF
-2. Click **Load Document** — the document is chunked, embedded, and indexed
-3. Type your question in the main panel
-4. Choose **Simple Query** for direct questions or **Multi-Hop Query** for complex ones
-5. The answer appears with citation markers (`[Chunk N]`) and a confidence score
-6. Expand **View Source Chunks** to inspect the exact passages used
-
-### Run evaluation
-
+### Run red-team eval (P2)
 ```bash
-python evaluation_agent.py
+cd eval-platform
+python3 main.py --model groq/llama-3.1-8b-instant --category all --ci
+```
+
+### Start leaderboard
+```bash
+cd eval-platform/leaderboard
+uvicorn api:app --port 8000
+streamlit run ui.py
 ```
 
 ---
@@ -289,16 +279,13 @@ python evaluation_agent.py
 
 - **Hybrid search beats either alone** — BM25 finds exact keywords, dense search finds meaning. RRF fusion gives best of both.
 - **Query decomposition is essential** — single retrieval fails multi-hop questions. Decompose first, retrieve per sub-question, combine.
-- **Prompt engineering > model size** — moving from `temperature=1.0` to `0.1` and adding "1-2 sentences max" moved Answer Relevancy from 0.36 to 0.998.
-- **Infrastructure constraints are engineering problems** — choosing the right evaluation cadence for your compute budget is a production decision, not a shortcut.
-- **Collection reset on document change** — ChromaDB must be cleared between document loads to prevent stale chunks from previous documents leaking into new queries.
+- **Prompt engineering > model size** — moving from `temperature=1.0` to `0.1` moved Answer Relevancy from 0.36 to 0.998.
+- **Retrieval-miss ≠ safety refusal** — the RAG system's "answer only from context" constraint deflects most attacks via retrieval-miss. This is not a genuine safety property. The judge must distinguish the two.
+- **Eval infrastructure creates constraints** — the value isn't in any single score. A dual CI gate means improving quality while increasing vulnerability gets blocked automatically.
 
 ---
 
 ## Part of 100 Days of Projects
 
-This is Project 1 of 3 in a 100-day public building challenge.
-
 Follow the build: [LinkedIn — Kritika Choudhary](https://www.linkedin.com/in/kritika-choudhary2708)
 
-#BuildInPublic #100DaysOfProjects #RAG #AIEngineering
